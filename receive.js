@@ -1,28 +1,17 @@
-#!/usr/bin/env node
+const amqp = require('amqplib');
 
-var amqp = require('amqplib/callback_api');
+async function receiveProducts() {
+    const queue = 'productQueue';
+    const conn = await amqp.connect('amqp://guest:guest@localhost');
+    const channel = await conn.createChannel();
 
-amqp.connect('amqp://localhost', function(error0, connection) {
-    if (error0) {
-        throw error0;
-    }
-    connection.createChannel(function(error1, channel) {
-        if (error1) {
-            throw error1;
-        }
+    await channel.assertQueue(queue, { durable: false });
+    console.log(" [*] Waiting for products in %s. To exit press CTRL+C", queue);
 
-        var queue = 'hello';
+    channel.consume(queue, message => {
+        const product = JSON.parse(message.content.toString());
+        console.log(" [x] Received %s", JSON.stringify(product));
+    }, { noAck: true });
+}
 
-        channel.assertQueue(queue, {
-            durable: false
-        });
-
-        console.log(" [*] Waiting for messages in %s. To exit press CTRL+C", queue);
-
-        channel.consume(queue, function(msg) {
-            console.log(" [x] Received %s", msg.content.toString());
-        }, {
-            noAck: true
-        });
-    });
-});
+receiveProducts().catch(console.error);

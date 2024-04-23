@@ -1,28 +1,52 @@
-#!/usr/bin/env node
+const amqp = require('amqplib');
 
-var amqp = require('amqplib/callback_api');
+async function sendProductsToQueue(products) {
+    const queue = 'productQueue';
+    const connectionString = 'amqp://guest:guest@localhost';
+    const conn = await amqp.connect(connectionString);
+    const channel = await conn.createChannel();
+    
+    await channel.assertQueue(queue, { durable: true });
 
-amqp.connect('amqp://localhost', function(error0, connection) {
-    if (error0) {
-        throw error0;
-    }
-    connection.createChannel(function(error1, channel) {
-        if (error1) {
-            throw error1;
+    // Helper function to create a delay
+    const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+    try {
+        // Send products with a delay of 0.2 seconds between each
+        for (let product of products) {
+            const message = Buffer.from(JSON.stringify(product));
+            const sent = channel.sendToQueue(queue, message);
+            if (!sent) {
+                console.log("Failed to send:", product);
+            } else {
+                console.log(" [x] Sent %s", JSON.stringify(product));
+            }
+            await delay(200); // Wait for 200ms before the next iteration
         }
+    } catch (error) {
+        console.error('Error sending products:', error);
+    } finally {
+        // Ensure the channel and connection are closed cleanly
+        setTimeout(async () => {
+            await channel.close();
+            await conn.close();
+        }, 1000);
+    }
+}
 
-        var queue = 'hello';
-        var log = '127.0.0.1 - - [31/Jul/2021:19:56:04 +0100] "GET / HTTP/1.1" 200 3477 "-" "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36"';
-
-        channel.assertQueue(queue, {
-            durable: false
+const generateProducts = (count) => {
+    const products = [];
+    for (let i = 0; i < count; i++) {
+        products.push({
+            id: i + 1,
+            name: `Product ${i + 1}`,
+            price: Math.random() * 100,
+            description: `Description for product ${i + 1}`,
+            stock: Math.floor(Math.random() * 100)
         });
-        channel.sendToQueue(queue, Buffer.from(log));
+    }
+    return products;
+};
 
-        console.log(" [x] Sent %s", log);
-    });
-    setTimeout(function() {
-        connection.close();
-        process.exit(0);
-    }, 500);
-});
+const products = generateProducts(100); // Generate 100 products dynamically
+sendProductsToQueue(products).catch(console.error);
